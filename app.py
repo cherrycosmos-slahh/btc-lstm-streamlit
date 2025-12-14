@@ -2,36 +2,58 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import joblib
-from tensorflow.keras.models import load_model
+from keras.models import load_model
+import os
 
-# ---------------- CONFIG ----------------
+st.set_page_config(page_title="BTC LSTM Predictor", layout="centered")
+
 MODEL_PATH = "model.h5"
 SCALER_PATH = "scaler.pkl"
-TIME_STEPS = 60
-FEATURES = 15
-# ----------------------------------------
 
 @st.cache_resource
 def load_artifacts():
+    if not os.path.exists(MODEL_PATH):
+        raise FileNotFoundError("model.h5 not found")
+
+    if not os.path.exists(SCALER_PATH):
+        raise FileNotFoundError("scaler.pkl not found")
+
     model = load_model(MODEL_PATH, compile=False)
     scaler = joblib.load(SCALER_PATH)
     return model, scaler
 
-st.set_page_config(page_title="BTC LSTM Predictor", layout="centered")
 
-st.title("BTC-USD Next Hour Price Prediction (LSTM)")
-st.caption("Using last 60 hours with 15 technical indicators")
+st.title("📈 Bitcoin Next Hour Price Prediction (LSTM)")
 
-model, scaler = load_artifacts()
+try:
+    model, scaler = load_artifacts()
+    st.success("Model loaded successfully")
+except Exception as e:
+    st.error(f"Failed to load model: {e}")
+    st.stop()
 
-if st.button("Predict Next Hour Price"):
-    # Dummy input (replace with live data later)
-    dummy_data = np.random.rand(TIME_STEPS, FEATURES)
-    scaled_data = scaler.transform(dummy_data)
+st.subheader("Enter last 60 BTC prices")
 
-    X = scaled_data.reshape(1, TIME_STEPS, FEATURES)
-    prediction = model.predict(X)[0][0]
+prices = st.text_area(
+    "Paste 60 prices (comma separated)",
+    height=120
+)
 
-    st.success(f"Predicted Next Hour Close: ${prediction:,.2f}")
+if st.button("Predict"):
+    try:
+        values = np.array([float(x) for x in prices.split(",")]).reshape(-1, 1)
 
-st.markdown(f"**Model input shape:** `(1, {TIME_STEPS}, {FEATURES})`")
+        if len(values) != 60:
+            st.error("You must enter exactly 60 values")
+            st.stop()
+
+        scaled = scaler.transform(values)
+        X = scaled.reshape(1, 60, 1)
+
+        prediction = model.predict(X)
+        predicted_price = scaler.inverse_transform(prediction)[0][0]
+
+        st.success(f"📊 Predicted Next Price: ${predicted_price:,.2f}")
+
+    except Exception as e:
+        st.error(f"Prediction failed: {e}")
